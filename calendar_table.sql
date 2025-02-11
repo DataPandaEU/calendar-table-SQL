@@ -186,6 +186,7 @@ DROP TABLE IF EXISTS #Calendar;
 
 CREATE TABLE #Calendar (
     DateKey              DATE PRIMARY KEY,
+	DateKeyInt			 INT,
     YearNumber           INT,
     MonthNumber          INT,
     MonthNumberText      CHAR(2),
@@ -218,7 +219,7 @@ WITH DateSeries AS (
 )
 INSERT INTO #Calendar 
 (
-    DateKey, YearNumber, MonthNumber, MonthNumberText, MonthName, Semester,
+    DateKey, DateKeyInt, YearNumber, MonthNumber, MonthNumberText, MonthName, Semester,
     DayOfMonthNumber, DayOfWeekNumber, DayOfWeekName,
     CalendarYearDayNumber, CalendarYearQuarter, CalendarYearQuarterText,
     FiscalYearNumber, FiscalYear, FiscalMonthNumber, FiscalMonthText,
@@ -227,6 +228,9 @@ INSERT INTO #Calendar
 )
 SELECT 
     DateKey,
+	-- DateKeyInt
+	CAST(CONVERT(VARCHAR(8), DateKey, 112) AS INT) AS DateKeyInt,
+	-- YearNumber
     YEAR(DateKey) AS YearNumber,
 	-- MonthNumber
     MONTH(DateKey) AS MonthNumber,
