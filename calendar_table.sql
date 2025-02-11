@@ -190,6 +190,7 @@ CREATE TABLE #Calendar (
     MonthNumber          INT,
     MonthNumberText      CHAR(2),
     MonthName            VARCHAR(20),
+	Semester			 INT,
     DayOfMonthNumber     INT,
     DayOfWeekNumber      INT,
     DayOfWeekName        VARCHAR(20),
@@ -203,7 +204,9 @@ CREATE TABLE #Calendar (
     FiscalYearDayNumber  INT,
     FiscalYearQuarter    INT,
     FiscalYearQuarterText VARCHAR(3),
-    FiscalPeriod         VARCHAR(10)
+    FiscalPeriod         VARCHAR(10),
+	FiscalYearStart		 DATE,
+	FiscalSemester       INT
 );
 
 WITH DateSeries AS (
@@ -215,48 +218,93 @@ WITH DateSeries AS (
 )
 INSERT INTO #Calendar 
 (
-    DateKey, YearNumber, MonthNumber, MonthNumberText, MonthName, 
+    DateKey, YearNumber, MonthNumber, MonthNumberText, MonthName, Semester,
     DayOfMonthNumber, DayOfWeekNumber, DayOfWeekName,
     CalendarYearDayNumber, CalendarYearQuarter, CalendarYearQuarterText,
     FiscalYearNumber, FiscalYear, FiscalMonthNumber, FiscalMonthText,
-    FiscalYearDayNumber, FiscalYearQuarter, FiscalYearQuarterText, FiscalPeriod
+    FiscalYearDayNumber, FiscalYearQuarter, FiscalYearQuarterText, FiscalPeriod,
+	FiscalYearStart, FiscalSemester
 )
 SELECT 
     DateKey,
     YEAR(DateKey) AS YearNumber,
+	-- MonthNumber
     MONTH(DateKey) AS MonthNumber,
+	-- MonthNumberText
     FORMAT(MONTH(DateKey), '00') AS MonthNumberText,
+	-- MonthName
     DATENAME(MONTH, DateKey) AS MonthName,
+	-- Semester
+	CASE WHEN MONTH(DateKey) <= 6 THEN 1 ELSE 2 END AS Semester,
+	-- DayOfMonthNumber
     DAY(DateKey) AS DayOfMonthNumber,
+	-- DayOfWeekNumber
     DATEPART(WEEKDAY, DateKey) AS DayOfWeekNumber,
+	-- DayOfWeekName
     DATENAME(WEEKDAY, DateKey) AS DayOfWeekName,
+	-- CalendarYearDayNumber
     DATEDIFF(DAY, DATEFROMPARTS(YEAR(DateKey), 1, 1), DateKey) + 1 AS CalendarYearDayNumber,
+	-- CalendarYearQuarter
     DATEPART(QUARTER, DateKey) AS CalendarYearQuarter,
+	-- CalendarYearQuarterText
     'Q' + CAST(DATEPART(QUARTER, DateKey) AS VARCHAR) AS CalendarYearQuarterText,
+	-- FiscalYearNumber
     RIGHT(CASE 
         WHEN @FiscalYearStartMonth > 1 AND MONTH(DateKey) >= @FiscalYearStartMonth THEN YEAR(DateKey) + 1 
         ELSE YEAR(DateKey)
     END, 2) AS FiscalYearNumber,
+	-- FiscalYear
 	'FY' + RIGHT(CASE 
         WHEN @FiscalYearStartMonth > 1 AND MONTH(DateKey) >= @FiscalYearStartMonth THEN YEAR(DateKey) + 1 
         ELSE YEAR(DateKey)
     END, 2) AS FiscalYear,
+	-- FiscalMonthNumber
     ((MONTH(DateKey) - @FiscalYearStartMonth + 12) % 12) + 1 AS FiscalMonthNumber,
+	-- FiscalMonthText
     FORMAT(((MONTH(DateKey) - @FiscalYearStartMonth + 12) % 12) + 1, '00') AS FiscalMonthText,
-    DATEDIFF(DAY, DATEADD(YEAR, DATEDIFF(YEAR, DATEADD(MONTH, -@FiscalYearStartMonth + 1, DateKey), DateKey), DATEADD(MONTH, -@FiscalYearStartMonth + 1, DateKey)), DateKey) + 1 AS FiscalYearDayNumber,
+	-- FiscalYearDayNumber
+	DATEDIFF(DAY,
+	DATEFROMPARTS(
+    CASE 
+        WHEN MONTH(DateKey) >= @FiscalYearStartMonth 
+        THEN YEAR(DateKey) 
+        ELSE YEAR(DateKey) - 1 
+    END,
+    @FiscalYearStartMonth,
+    1
+	)
+	, DateKey) + 1 AS FiscalYearDayNumber,
+	-- FiscalYearQuarter
     ((MONTH(DateKey) - @FiscalYearStartMonth + 12) % 12) / 3 + 1 AS FiscalYearQuarter,
+	-- FiscalYearQuarterText
     'Q' + CAST((((MONTH(DateKey) - @FiscalYearStartMonth + 12) % 12) / 3 + 1) AS VARCHAR) AS FiscalYearQuarterText,
-    CAST(CASE 
-            WHEN MONTH(DateKey) >= @FiscalYearStartMonth 
-            THEN YEAR(DateKey) + 1 
-            ELSE YEAR(DateKey)
-         END AS VARCHAR) 
+	-- FiscalPeriod
+    'FY' + RIGHT(CASE 
+        WHEN @FiscalYearStartMonth > 1 AND MONTH(DateKey) >= @FiscalYearStartMonth THEN YEAR(DateKey) + 1 
+        ELSE YEAR(DateKey)
+    END, 2) 
     + '-' + 
-    FORMAT(((MONTH(DateKey) - @FiscalYearStartMonth + 12) % 12) + 1, '00') AS FiscalPeriod
+    FORMAT(((MONTH(DateKey) - @FiscalYearStartMonth + 12) % 12) + 1, '00') AS FiscalPeriod,
+	-- FiscalYearStart
+	DATEFROMPARTS(
+    CASE 
+        WHEN MONTH(DateKey) >= @FiscalYearStartMonth 
+        THEN YEAR(DateKey) 
+        ELSE YEAR(DateKey) - 1 
+    END,
+    @FiscalYearStartMonth,
+    1
+	) AS FiscalYearStart,
+	-- FiscalSemester
+	CASE WHEN (((MONTH(DateKey) - @FiscalYearStartMonth + 12) % 12) + 1) <= 6 THEN 1 ELSE 2 END AS FiscalSemester
 FROM DateSeries
 OPTION (MAXRECURSION 0);
 
 -------------------------------------------------------------------------------
 -- 10) Final Results
 -------------------------------------------------------------------------------
-SELECT * FROM #Calendar ORDER BY DateKey;
+DROP TABLE IF EXISTS dbo.CalendarTable;
+
+SELECT * 
+INTO dbo.CalendarTable
+FROM #Calendar ORDER BY DateKey;
